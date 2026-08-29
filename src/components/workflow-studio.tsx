@@ -39,7 +39,10 @@ type RunSession = {
   payload: string;
 };
 
+type StudioTab = "workflow" | "runs";
+
 export function WorkflowStudio() {
+  const [tab, setTab] = useState<StudioTab>("workflow");
   const [templateId, setTemplateId] = useState(WORKFLOW_TEMPLATES[0].id);
   const [config, setConfig] = useState<Record<string, string>>({ ...DEFAULT_CONFIG });
   const [payload, setPayload] = useState(WORKFLOW_TEMPLATES[0].samplePayload);
@@ -55,7 +58,7 @@ export function WorkflowStudio() {
 
   const template = useMemo(
     () => WORKFLOW_TEMPLATES.find((t) => t.id === templateId) ?? WORKFLOW_TEMPLATES[0],
-    [templateId]
+    [templateId],
   );
 
   const selectedStep = template.steps.find((s) => s.id === selectedStepId) ?? template.steps[0];
@@ -91,7 +94,7 @@ export function WorkflowStudio() {
       setRuns((prev) => [...prev.slice(-40), run]);
       return run;
     },
-    [socket]
+    [socket],
   );
 
   useEffect(() => {
@@ -120,6 +123,7 @@ export function WorkflowStudio() {
     const sessionEvents: RunEvent[] = [];
     setRunning(true);
     setActiveStep(null);
+    setTab("runs");
 
     const startRun = broadcast(`${template.name}`, "started", {
       output: payload.slice(0, 120),
@@ -183,312 +187,339 @@ export function WorkflowStudio() {
   };
 
   return (
-    <div className="min-h-screen pt-14">
+    <div className="min-h-screen pt-[57px]">
       <PortfolioBar />
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-[10px] tracking-[0.35em] text-[#39ff14]/50 uppercase">
-                Partykit · Live Runs
-              </p>
-              <h1 className="mt-1 text-2xl font-bold text-[#39ff14]">FlowForge</h1>
-              <p className="mt-1 text-sm text-[#39ff14]/40">
-                Orquestación de workflows IA — plantillas, payload y config por paso
-              </p>
-            </div>
-            <button
-              onClick={runWorkflow}
-              disabled={running || !!payloadError}
-              title="⌘+Enter to run"
-              className="inline-flex items-center gap-2 rounded-lg border border-[#39ff14]/40 bg-[#39ff14]/10 px-5 py-2.5 text-sm font-semibold text-[#39ff14] transition hover:bg-[#39ff14]/20 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[#39ff14]"
-            >
-              {running ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Play className="h-4 w-4" aria-hidden="true" />
-              )}
-              {running ? "Ejecutando…" : "Run Workflow"}
-            </button>
-          </div>
-
-          <section className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a] p-4">
-            <p className="mb-3 text-[10px] tracking-widest text-[#39ff14]/40 uppercase">
-              Templates
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-xs tracking-[0.35em] text-cyan-400/70 uppercase">
+              Partykit · Live Runs
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {WORKFLOW_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => selectTemplate(t)}
-                  className={`rounded-lg border p-3 text-left transition ${
-                    t.id === templateId
-                      ? "border-[#39ff14]/50 bg-[#39ff14]/10"
-                      : "border-[#39ff14]/10 bg-[#050805] hover:border-[#39ff14]/25"
-                  }`}
-                >
-                  <p className="text-xs font-semibold text-[#39ff14]">{t.name}</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-[#39ff14]/45">
-                    {t.description}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a] p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              {template.steps.map((step, i) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => setSelectedStepId(step.id)}
-                  className="flex flex-1 items-center gap-3 text-left"
-                >
-                  <div
-                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border text-xl transition-all ${
-                      activeStep === i
-                        ? "border-[#39ff14] bg-[#39ff14]/15 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
-                        : selectedStepId === step.id
-                          ? "border-[#39ff14]/50 bg-[#39ff14]/8"
-                          : activeStep !== null && i < activeStep
-                            ? "border-[#39ff14]/40 bg-[#39ff14]/5"
-                            : "border-[#39ff14]/10 bg-[#050805]"
-                    }`}
-                  >
-                    {activeStep !== null && i < activeStep ? (
-                      <CheckCircle2 className="h-5 w-5 text-[#39ff14]" aria-hidden="true" />
-                    ) : activeStep === i ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-[#39ff14]" aria-hidden="true" />
-                    ) : (
-                      <span role="img" aria-hidden="true">
-                        {step.icon}
-                      </span>
-                    )}
-                  </div>
-                  {i < template.steps.length - 1 && (
-                    <div
-                      className={`hidden h-px flex-1 md:block ${
-                        activeStep !== null && i < activeStep
-                          ? "bg-[#39ff14]/60"
-                          : "bg-[#39ff14]/10"
-                      }`}
-                      aria-hidden="true"
-                    />
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-              {template.steps.map((step) => (
-                <p key={step.id} className="text-center text-[10px] text-[#39ff14]/50">
-                  {step.label}
-                </p>
-              ))}
-            </div>
-          </section>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a] p-4">
-              <div className="mb-2 flex items-center gap-2 text-[#39ff14]/60">
-                <Settings2 className="h-4 w-4" aria-hidden="true" />
-                <span className="text-[10px] tracking-widest uppercase">
-                  Step config · {selectedStep.label}
-                </span>
-              </div>
-              <label className="text-[10px] text-[#39ff14]/40">{selectedStep.configKey}</label>
-              <input
-                value={config[selectedStep.configKey] ?? ""}
-                onChange={(e) =>
-                  setConfig((c) => ({ ...c, [selectedStep.configKey]: e.target.value }))
-                }
-                className="mt-1 w-full rounded border border-[#39ff14]/20 bg-[#050805] px-3 py-2 text-xs text-[#39ff14] outline-none focus:border-[#39ff14]/50"
-              />
-              <p className="mt-2 text-[10px] leading-relaxed text-[#39ff14]/45">
-                {selectedStep.description}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[9px] text-[#39ff14]/35">
-                <div>
-                  <span className="text-[#39ff14]/25">IN</span> {selectedStep.inputSchema}
-                </div>
-                <div>
-                  <span className="text-[#39ff14]/25">OUT</span> {selectedStep.outputSchema}
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a] p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-[10px] tracking-widest text-[#39ff14]/40 uppercase">
-                  Test payload (JSON)
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      setPayload(JSON.stringify(JSON.parse(payload), null, 2));
-                      setPayloadError(null);
-                    } catch {
-                      /* keep error */
-                    }
-                  }}
-                  className="text-[9px] text-[#39ff14]/50 hover:text-[#39ff14]"
-                >
-                  Format
-                </button>
-              </div>
-              <textarea
-                value={payload}
-                onChange={(e) => {
-                  setPayload(e.target.value);
-                  validatePayload(e.target.value);
-                }}
-                rows={4}
-                className={`w-full resize-none rounded border bg-[#050805] px-3 py-2 font-mono text-[11px] text-[#39ff14]/80 outline-none focus:border-[#39ff14]/50 ${
-                  payloadError ? "border-red-500/50" : "border-[#39ff14]/20"
-                }`}
-              />
-              {payloadError && (
-                <p className="mt-1 font-mono text-[9px] text-red-400">{payloadError}</p>
-              )}
-              <label className="mt-3 flex items-center gap-2 text-[10px] text-[#39ff14]/50">
-                <input
-                  type="checkbox"
-                  checked={simulateFailure}
-                  onChange={(e) => setSimulateFailure(e.target.checked)}
-                  className="rounded"
-                />
-                Simulate failure at step 2
-              </label>
-            </section>
+            <h1 className="mt-1 text-2xl font-bold text-white">FlowForge</h1>
+            <p className="mt-1 text-sm text-zinc-400">
+              Orquestación de workflows IA — plantillas, payload y config por paso
+            </p>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              { icon: Zap, label: "Triggers", value: "Webhook · Cron · Email" },
-              { icon: Bot, label: "AI Steps", value: "Gemini · Tool Calling" },
-              { icon: Radio, label: "Status", value: connected ? "Live · Connected" : "Connecting…" },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-lg border border-[#39ff14]/10 bg-[#0a120a] p-4"
-              >
-                <item.icon className="mb-2 h-4 w-4 text-[#39ff14]/60" aria-hidden="true" />
-                <p className="text-[10px] tracking-widest text-[#39ff14]/40 uppercase">
-                  {item.label}
-                </p>
-                <p className="mt-1 text-xs text-[#39ff14]/70">{item.value}</p>
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={runWorkflow}
+            disabled={running || !!payloadError}
+            title="⌘+Enter to run"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:from-cyan-300 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-cyan-400"
+          >
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
+            {running ? "Ejecutando…" : "Run Workflow"}
+          </button>
         </div>
 
-        <aside className="space-y-4 lg:col-span-4">
-          <div className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a]">
-            <div className="flex items-center justify-between border-b border-[#39ff14]/10 px-4 py-3">
-              <span className="text-[10px] tracking-widest text-[#39ff14]/50 uppercase">
-                Live Run Log
-              </span>
-              <Radio
-                className={`h-3 w-3 ${connected ? "text-[#39ff14]" : "text-red-400"}`}
-                aria-hidden="true"
-              />
-            </div>
-            <div className="max-h-[280px] space-y-2 overflow-y-auto p-3">
-              {runs.length === 0 ? (
-                <p className="text-[10px] text-[#39ff14]/30">
-                  Ejecuta un workflow para ver eventos en vivo…
-                </p>
-              ) : (
-                runs
-                  .slice()
-                  .reverse()
-                  .map((run) => (
+        <div className="mb-6 flex gap-1 rounded-xl border border-white/8 bg-zinc-950/60 p-1">
+          {(
+            [
+              { id: "workflow" as const, label: "Workflow" },
+              { id: "runs" as const, label: "Runs" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
+                tab === item.id
+                  ? "bg-cyan-500/10 text-cyan-300"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "workflow" ? (
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-5">
+              <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                Templates
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {WORKFLOW_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => selectTemplate(t)}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      t.id === templateId
+                        ? "border-cyan-500/40 bg-cyan-500/10"
+                        : "border-white/8 bg-zinc-950/40 hover:border-cyan-500/20"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold text-white">{t.name}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-500">{t.description}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-6">
+              <p className="mb-4 font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                Pipeline
+              </p>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                {template.steps.map((step, i) => (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => setSelectedStepId(step.id)}
+                    title={step.label}
+                    className="flex flex-1 items-center gap-3 text-left"
+                  >
                     <div
-                      key={`${run.id}-${run.ts}`}
-                      className="rounded border border-[#39ff14]/10 bg-[#050805] px-3 py-2"
+                      className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border transition-all ${
+                        activeStep === i
+                          ? "border-cyan-400 bg-cyan-500/15 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                          : selectedStepId === step.id
+                            ? "border-cyan-500/40 bg-cyan-500/8"
+                            : activeStep !== null && i < activeStep
+                              ? "border-cyan-500/30 bg-cyan-500/5"
+                              : "border-white/8 bg-zinc-950/60"
+                      }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-[#39ff14]/60">{run.user}</span>
-                        <span
-                          className={`text-[9px] uppercase ${
-                            run.status === "done" || run.status === "complete"
-                              ? "text-[#39ff14]"
-                              : run.status === "running"
-                                ? "text-yellow-400"
-                                : run.status === "failed"
-                                  ? "text-red-400"
-                                  : "text-[#39ff14]/40"
-                          }`}
-                        >
-                          {run.status}
-                          {run.durationMs ? ` · ${run.durationMs}ms` : ""}
+                      {activeStep !== null && i < activeStep ? (
+                        <CheckCircle2 className="h-5 w-5 text-cyan-400" aria-hidden="true" />
+                      ) : activeStep === i ? (
+                        <Loader2
+                          className="h-5 w-5 animate-spin text-cyan-400"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <span className="text-lg" role="img" aria-hidden="true">
+                          {step.icon}
                         </span>
+                      )}
+                      <span className="mt-0.5 max-w-[52px] truncate text-[9px] text-zinc-500">
+                        {step.label}
+                      </span>
+                    </div>
+                    {i < template.steps.length - 1 && (
+                      <div
+                        className={`hidden h-px flex-1 md:block ${
+                          activeStep !== null && i < activeStep ? "bg-cyan-500/40" : "bg-white/8"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-4">
+                <div className="mb-2 flex items-center gap-2 text-zinc-400">
+                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                  <span className="font-mono text-xs tracking-widest uppercase">
+                    Step config · {selectedStep.label}
+                  </span>
+                </div>
+                <label className="text-xs text-zinc-500">{selectedStep.configKey}</label>
+                <input
+                  value={config[selectedStep.configKey] ?? ""}
+                  onChange={(e) =>
+                    setConfig((c) => ({ ...c, [selectedStep.configKey]: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-500/50"
+                />
+                <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+                  {selectedStep.description}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[10px] text-zinc-500">
+                  <div>
+                    <span className="text-zinc-600">IN</span> {selectedStep.inputSchema}
+                  </div>
+                  <div>
+                    <span className="text-zinc-600">OUT</span> {selectedStep.outputSchema}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                    Test payload (JSON)
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        setPayload(JSON.stringify(JSON.parse(payload), null, 2));
+                        setPayloadError(null);
+                      } catch {
+                        /* keep error */
+                      }
+                    }}
+                    className="font-mono text-[10px] text-zinc-500 hover:text-cyan-400"
+                  >
+                    Format
+                  </button>
+                </div>
+                <textarea
+                  value={payload}
+                  onChange={(e) => {
+                    setPayload(e.target.value);
+                    validatePayload(e.target.value);
+                  }}
+                  rows={4}
+                  className={`w-full resize-none rounded-lg border bg-zinc-950 px-3 py-2 font-mono text-xs text-cyan-200/80 outline-none focus:border-cyan-500/50 ${
+                    payloadError ? "border-red-500/50" : "border-white/10"
+                  }`}
+                />
+                {payloadError && (
+                  <p className="mt-1 font-mono text-[10px] text-red-400">{payloadError}</p>
+                )}
+                <label className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+                  <input
+                    type="checkbox"
+                    checked={simulateFailure}
+                    onChange={(e) => setSimulateFailure(e.target.checked)}
+                    className="rounded"
+                  />
+                  Simulate failure at step 2
+                </label>
+              </section>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                { icon: Zap, label: "Triggers", value: "Webhook · Cron · Email" },
+                { icon: Bot, label: "AI Steps", value: "Gemini · Tool Calling" },
+                {
+                  icon: Radio,
+                  label: "Status",
+                  value: connected ? "Live · Connected" : "Connecting…",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-white/8 bg-zinc-950/60 p-4"
+                >
+                  <item.icon className="mb-2 h-4 w-4 text-cyan-400/70" aria-hidden="true" />
+                  <p className="font-mono text-[10px] tracking-widest text-zinc-500 uppercase">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-300">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60">
+              <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
+                <span className="font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                  Live Run Log
+                </span>
+                <Radio
+                  className={`h-3.5 w-3.5 ${connected ? "text-cyan-400" : "text-red-400"}`}
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="max-h-[360px] space-y-2 overflow-y-auto p-4">
+                {runs.length === 0 ? (
+                  <p className="text-sm text-zinc-500">
+                    Ejecuta un workflow para ver eventos en vivo…
+                  </p>
+                ) : (
+                  runs
+                    .slice()
+                    .reverse()
+                    .map((run) => (
+                      <div
+                        key={`${run.id}-${run.ts}`}
+                        className="rounded-lg border border-white/8 bg-zinc-950/80 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-zinc-500">{run.user}</span>
+                          <span
+                            className={`font-mono text-[10px] uppercase ${
+                              run.status === "done" || run.status === "complete"
+                                ? "text-cyan-400"
+                                : run.status === "running"
+                                  ? "text-amber-400"
+                                  : run.status === "failed"
+                                    ? "text-red-400"
+                                    : "text-zinc-500"
+                            }`}
+                          >
+                            {run.status}
+                            {run.durationMs ? ` · ${run.durationMs}ms` : ""}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-sm text-zinc-200">{run.step}</p>
+                        {run.output && (
+                          <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">
+                            {run.output}
+                          </p>
+                        )}
                       </div>
-                      <p className="mt-0.5 text-xs text-[#39ff14]/80">{run.step}</p>
-                      {run.output && (
-                        <p className="mt-1 truncate font-mono text-[9px] text-[#39ff14]/35">
-                          {run.output}
+                    ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60">
+              <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
+                <Clock className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" />
+                <span className="font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                  Run History
+                </span>
+              </div>
+              <div className="max-h-[320px] space-y-2 overflow-y-auto p-4">
+                {history.length === 0 ? (
+                  <p className="text-sm text-zinc-500">Sin ejecuciones previas</p>
+                ) : (
+                  history.map((h) => (
+                    <div key={h.id} className="rounded-lg border border-white/8 bg-zinc-950/80">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedHistoryId(expandedHistoryId === h.id ? null : h.id)
+                        }
+                        className="w-full px-3 py-2 text-left"
+                      >
+                        <p className="text-sm font-medium text-zinc-200">
+                          {WORKFLOW_TEMPLATES.find((t) => t.id === h.templateId)?.name}
                         </p>
+                        <p className="mt-0.5 truncate font-mono text-[10px] text-zinc-500">
+                          {h.payload.slice(0, 80)}…
+                        </p>
+                        {h.finishedAt && (
+                          <p className="mt-1 font-mono text-[10px] text-zinc-600">
+                            {h.finishedAt - h.startedAt}ms total · {h.events.length} events
+                          </p>
+                        )}
+                      </button>
+                      {expandedHistoryId === h.id && (
+                        <div className="space-y-1 border-t border-white/8 px-3 py-2">
+                          {h.events.map((ev) => (
+                            <div key={ev.id} className="font-mono text-[10px] text-zinc-500">
+                              {ev.step} · {ev.status}
+                              {ev.output && (
+                                <span className="block truncate text-zinc-600">{ev.output}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   ))
-              )}
-            </div>
+                )}
+              </div>
+            </section>
           </div>
-
-          <div className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a]">
-            <div className="flex items-center gap-2 border-b border-[#39ff14]/10 px-4 py-3">
-              <Clock className="h-3.5 w-3.5 text-[#39ff14]/50" aria-hidden="true" />
-              <span className="text-[10px] tracking-widest text-[#39ff14]/50 uppercase">
-                Run History
-              </span>
-            </div>
-            <div className="max-h-[220px] space-y-2 overflow-y-auto p-3">
-              {history.length === 0 ? (
-                <p className="text-[10px] text-[#39ff14]/30">Sin ejecuciones previas</p>
-              ) : (
-                history.map((h) => (
-                  <div key={h.id} className="rounded border border-[#39ff14]/10 bg-[#050805]">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedHistoryId(expandedHistoryId === h.id ? null : h.id)
-                      }
-                      className="w-full px-3 py-2 text-left"
-                    >
-                      <p className="text-xs font-medium text-[#39ff14]/80">
-                        {WORKFLOW_TEMPLATES.find((t) => t.id === h.templateId)?.name}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[9px] text-[#39ff14]/35">
-                        {h.payload.slice(0, 60)}…
-                      </p>
-                      {h.finishedAt && (
-                        <p className="mt-1 text-[9px] text-[#39ff14]/40">
-                          {h.finishedAt - h.startedAt}ms total · {h.events.length} events
-                        </p>
-                      )}
-                    </button>
-                    {expandedHistoryId === h.id && (
-                      <div className="space-y-1 border-t border-[#39ff14]/10 px-3 py-2">
-                        {h.events.map((ev) => (
-                          <div key={ev.id} className="font-mono text-[9px] text-[#39ff14]/50">
-                            {ev.step} · {ev.status}
-                            {ev.output && (
-                              <span className="block truncate text-[#39ff14]/30">{ev.output}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </aside>
+        )}
       </div>
     </div>
   );
@@ -498,7 +529,8 @@ function mockStepOutput(stepId: string, payload: string): string {
   try {
     const p = JSON.parse(payload);
     if (stepId === "ai") return `enriched: ${JSON.stringify({ ...p, score: 0.87 })}`;
-    if (stepId === "transform") return `mapped → CRM record #${Math.floor(Math.random() * 9000 + 1000)}`;
+    if (stepId === "transform")
+      return `mapped → CRM record #${Math.floor(Math.random() * 9000 + 1000)}`;
     if (stepId === "notify") return `delivered · ack id wf_${Date.now().toString(36)}`;
     return `received ${Object.keys(p).length} fields`;
   } catch {

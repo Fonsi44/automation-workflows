@@ -1,23 +1,30 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-jetbrains), ui-monospace, monospace;
+  --font-sans: var(--font-syne), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 }
 
 body {
-  font-family: var(--font-jetbrains), ui-monospace, monospace;
-  background: #050805;
-  color: #b8ffb8;
+  font-family: var(--font-syne), system-ui, sans-serif;
 }
 
 ::selection {
-  background: rgb(57 255 20 / 0.25);
+  background: rgb(34 211 238 / 0.25);
+  color: white;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(34 211 238);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
