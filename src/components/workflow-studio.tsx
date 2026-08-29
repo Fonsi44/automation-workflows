@@ -355,7 +355,7 @@ export function WorkflowStudio() {
               <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
                 Templates
               </p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {WORKFLOW_TEMPLATES.map((t) => (
                   <button
                     key={t.id}
@@ -502,7 +502,7 @@ export function WorkflowStudio() {
               </section>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 { icon: Zap, label: "Triggers", value: "Webhook · Cron · Email" },
                 { icon: Bot, label: "AI Steps", value: "Gemini · Tool Calling" },
