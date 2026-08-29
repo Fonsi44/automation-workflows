@@ -226,7 +226,7 @@ export function WorkflowStudio() {
   };
 
   return (
-    <div className="min-h-screen pt-[57px]">
+    <div className="min-h-screen pt-[4.75rem] md:pt-14">
       <PortfolioBar />
 
       <div className="mx-auto max-w-5xl px-4 py-8">
