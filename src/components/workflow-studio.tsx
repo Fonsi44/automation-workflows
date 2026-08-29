@@ -55,6 +55,10 @@ export function WorkflowStudio() {
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState("https://hooks.example.com/flowforge");
+  const [webhookLog, setWebhookLog] = useState<string[]>([]);
+  const [suggestDesc, setSuggestDesc] = useState("");
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   const template = useMemo(
     () => WORKFLOW_TEMPLATES.find((t) => t.id === templateId) ?? WORKFLOW_TEMPLATES[0],
@@ -117,6 +121,36 @@ export function WorkflowStudio() {
     setPayload(t.samplePayload);
   };
 
+  const simulateWebhook = () => {
+    const event = {
+      id: crypto.randomUUID(),
+      url: webhookUrl,
+      payload: JSON.parse(payload),
+      ts: new Date().toISOString(),
+    };
+    setWebhookLog((prev) => [`POST ${webhookUrl} · ${event.id.slice(0, 8)}`, ...prev].slice(0, 5));
+    void runWorkflow();
+  };
+
+  const suggestWorkflow = async () => {
+    if (!suggestDesc.trim() || suggestLoading) return;
+    setSuggestLoading(true);
+    try {
+      const res = await fetch("/api/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: suggestDesc.trim() }),
+      });
+      const data = (await res.json()) as { templateId?: string };
+      if (data.templateId) {
+        const t = WORKFLOW_TEMPLATES.find((x) => x.id === data.templateId);
+        if (t) selectTemplate(t);
+      }
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   const runWorkflow = async () => {
     if (running || !validatePayload(payload)) return;
     const sessionId = crypto.randomUUID();
@@ -135,7 +169,7 @@ export function WorkflowStudio() {
       setActiveStep(i);
       const t0 = Date.now();
       broadcast(step.label, "running", {
-        output: config[step.configKey] ?? "",
+        output: `config: model=${config.model ?? "gemini-3.6-flash"} temp=${config.temperature ?? "0.7"} · ${config[step.configKey] ?? ""}`,
       });
       await new Promise((r) => setTimeout(r, step.ms));
 
@@ -163,7 +197,9 @@ export function WorkflowStudio() {
       }
 
       const stepOutput =
-        step.id === "ai" ? await fetchEnrichOutput(payload) : mockStepOutput(step.id, payload);
+        step.id === "ai"
+          ? await fetchAiOutput(template.id, payload, config)
+          : mockStepOutput(step.id, payload);
 
       const done = broadcast(step.label, "done", {
         durationMs: Date.now() - t0,
@@ -243,6 +279,78 @@ export function WorkflowStudio() {
 
         {tab === "workflow" ? (
           <div className="space-y-6">
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-5">
+              <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                AI config (aplica a pasos Gemini)
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="font-mono text-[10px] text-zinc-500">Model</span>
+                  <input
+                    value={config.model ?? "gemini-3.6-flash"}
+                    onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-300"
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-mono text-[10px] text-zinc-500">Temperature</span>
+                  <input
+                    value={config.temperature ?? "0.7"}
+                    onChange={(e) => setConfig((c) => ({ ...c, temperature: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-300"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-5">
+              <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                AI suggest workflow
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={suggestDesc}
+                  onChange={(e) => setSuggestDesc(e.target.value)}
+                  placeholder="Describe el proceso (ej. triage tickets de billing)"
+                  className="flex-1 rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-zinc-300"
+                />
+                <button
+                  type="button"
+                  onClick={suggestWorkflow}
+                  disabled={suggestLoading}
+                  className="rounded-lg border border-violet-500/30 px-4 py-2 font-mono text-xs text-violet-300 disabled:opacity-50"
+                >
+                  {suggestLoading ? "…" : "Sugerir plantilla"}
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-5">
+              <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
+                Webhook simulator
+              </p>
+              <input
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 font-mono text-xs text-cyan-200/80"
+              />
+              <button
+                type="button"
+                onClick={simulateWebhook}
+                disabled={running || !!payloadError}
+                className="mt-3 rounded-lg border border-cyan-500/30 px-4 py-2 font-mono text-xs text-cyan-300 disabled:opacity-50"
+              >
+                Disparar webhook → run
+              </button>
+              {webhookLog.length > 0 && (
+                <ul className="mt-3 space-y-1 font-mono text-[10px] text-zinc-600">
+                  {webhookLog.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
             <section className="rounded-2xl border border-white/8 bg-zinc-950/60 p-5">
               <p className="mb-3 font-mono text-xs tracking-widest text-zinc-500 uppercase">
                 Templates
@@ -540,25 +648,57 @@ function mockStepOutput(stepId: string, payload: string): string {
   }
 }
 
-async function fetchEnrichOutput(payload: string): Promise<string> {
+async function fetchAiOutput(
+  templateId: string,
+  payload: string,
+  config: Record<string, string>,
+): Promise<string> {
+  const endpoint =
+    templateId === "invoice-processing"
+      ? "/api/extract"
+      : templateId === "support-triage"
+        ? "/api/classify"
+        : "/api/enrich";
+  const started = Date.now();
   try {
-    const res = await fetch("/api/enrich", {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload }),
+      body: JSON.stringify({ payload, config }),
     });
     const data = (await res.json()) as Record<string, unknown>;
-    if (!res.ok) {
-      return `enrich error: ${String(data.error ?? res.statusText)}`;
+    const latencyMs = Date.now() - started;
+    const output = !res.ok
+      ? `${endpoint} error: ${String(data.error ?? res.statusText)}`
+      : data.fallback
+        ? `[fallback] ${JSON.stringify(data)}`
+        : `[${String(data.model ?? "gemini-3.6-flash")}] ${JSON.stringify(data)}`;
+
+    if (typeof window !== "undefined") {
+      try {
+        const key = "modeltrace-traces-v1";
+        const existing = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
+        const trace = {
+          id: Math.random().toString(36).slice(2, 10),
+          prompt: `FlowForge ${templateId}: ${payload.slice(0, 200)}`,
+          output: output.slice(0, 500),
+          model: String(data.model ?? "gemini-3.6-flash"),
+          status: res.ok ? (data.fallback ? "fallback" : "ok") : "error",
+          latencyMs,
+          inputTokens: Math.ceil(payload.length / 4),
+          outputTokens: Math.ceil(output.length / 4),
+          totalTokens: Math.ceil((payload.length + output.length) / 4),
+          createdAt: new Date().toISOString(),
+          source: "flowforge",
+        };
+        localStorage.setItem(key, JSON.stringify([trace, ...existing].slice(0, 50)));
+      } catch {
+        /* ignore */
+      }
     }
-    if (data.fallback) {
-      const { fallback: _, message, ...enriched } = data;
-      return `[fallback] ${String(message)} · ${JSON.stringify(enriched)}`;
-    }
-    const model = data.model ? `[${data.model}] ` : "";
-    const { model: _m, ...enriched } = data;
-    return `${model}${JSON.stringify(enriched)}`;
+
+    return output;
   } catch (error) {
-    return `enrich error: ${error instanceof Error ? error.message : "unknown"}`;
+    return `${endpoint} error: ${error instanceof Error ? error.message : "unknown"}`;
   }
 }

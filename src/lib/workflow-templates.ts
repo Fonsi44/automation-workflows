@@ -57,6 +57,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
 ];
 
 export const DEFAULT_CONFIG: Record<string, string> = {
+  model: "gemini-3.6-flash",
+  temperature: "0.7",
   webhookUrl: "https://api.flowforge.dev/hooks/leads",
   aiPrompt: "Enrich company data from domain and LinkedIn signals",
   crmMapping: "hubspot.contact.v2",
