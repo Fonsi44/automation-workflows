@@ -49,6 +49,9 @@ export function WorkflowStudio() {
   const [runs, setRuns] = useState<RunEvent[]>([]);
   const [history, setHistory] = useState<RunSession[]>([]);
   const [connected, setConnected] = useState(false);
+  const [payloadError, setPayloadError] = useState<string | null>(null);
+  const [simulateFailure, setSimulateFailure] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   const template = useMemo(
     () => WORKFLOW_TEMPLATES.find((t) => t.id === templateId) ?? WORKFLOW_TEMPLATES[0],
@@ -95,13 +98,24 @@ export function WorkflowStudio() {
     setSelectedStepId(template.steps[0]?.id ?? null);
   }, [template]);
 
+  const validatePayload = (raw: string) => {
+    try {
+      JSON.parse(raw);
+      setPayloadError(null);
+      return true;
+    } catch (e) {
+      setPayloadError(e instanceof Error ? e.message : "Invalid JSON");
+      return false;
+    }
+  };
+
   const selectTemplate = (t: WorkflowTemplate) => {
     setTemplateId(t.id);
     setPayload(t.samplePayload);
   };
 
   const runWorkflow = async () => {
-    if (running) return;
+    if (running || !validatePayload(payload)) return;
     const sessionId = crypto.randomUUID();
     const sessionEvents: RunEvent[] = [];
     setRunning(true);
@@ -120,6 +134,30 @@ export function WorkflowStudio() {
         output: config[step.configKey] ?? "",
       });
       await new Promise((r) => setTimeout(r, step.ms));
+
+      if (simulateFailure && i === 1) {
+        const fail = broadcast(step.label, "failed", {
+          durationMs: Date.now() - t0,
+          output: "Simulated error: upstream timeout (503)",
+        });
+        sessionEvents.push(fail);
+        broadcast("workflow", "failed");
+        setActiveStep(null);
+        setRunning(false);
+        setHistory((prev) => [
+          {
+            id: sessionId,
+            templateId: template.id,
+            startedAt: Date.now() - template.steps.slice(0, i + 1).reduce((a, s) => a + s.ms, 0),
+            finishedAt: Date.now(),
+            events: sessionEvents,
+            payload,
+          },
+          ...prev.slice(0, 9),
+        ]);
+        return;
+      }
+
       const done = broadcast(step.label, "done", {
         durationMs: Date.now() - t0,
         output: mockStepOutput(step.id, payload),
@@ -162,7 +200,8 @@ export function WorkflowStudio() {
             </div>
             <button
               onClick={runWorkflow}
-              disabled={running}
+              disabled={running || !!payloadError}
+              title="⌘+Enter to run"
               className="inline-flex items-center gap-2 rounded-lg border border-[#39ff14]/40 bg-[#39ff14]/10 px-5 py-2.5 text-sm font-semibold text-[#39ff14] transition hover:bg-[#39ff14]/20 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[#39ff14]"
             >
               {running ? (
@@ -267,18 +306,62 @@ export function WorkflowStudio() {
                 }
                 className="mt-1 w-full rounded border border-[#39ff14]/20 bg-[#050805] px-3 py-2 text-xs text-[#39ff14] outline-none focus:border-[#39ff14]/50"
               />
+              <p className="mt-2 text-[10px] leading-relaxed text-[#39ff14]/45">
+                {selectedStep.description}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[9px] text-[#39ff14]/35">
+                <div>
+                  <span className="text-[#39ff14]/25">IN</span> {selectedStep.inputSchema}
+                </div>
+                <div>
+                  <span className="text-[#39ff14]/25">OUT</span> {selectedStep.outputSchema}
+                </div>
+              </div>
             </section>
 
             <section className="rounded-xl border border-[#39ff14]/15 bg-[#0a120a] p-4">
-              <p className="mb-2 text-[10px] tracking-widest text-[#39ff14]/40 uppercase">
-                Test payload (JSON)
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] tracking-widest text-[#39ff14]/40 uppercase">
+                  Test payload (JSON)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      setPayload(JSON.stringify(JSON.parse(payload), null, 2));
+                      setPayloadError(null);
+                    } catch {
+                      /* keep error */
+                    }
+                  }}
+                  className="text-[9px] text-[#39ff14]/50 hover:text-[#39ff14]"
+                >
+                  Format
+                </button>
+              </div>
               <textarea
                 value={payload}
-                onChange={(e) => setPayload(e.target.value)}
+                onChange={(e) => {
+                  setPayload(e.target.value);
+                  validatePayload(e.target.value);
+                }}
                 rows={4}
-                className="w-full resize-none rounded border border-[#39ff14]/20 bg-[#050805] px-3 py-2 font-mono text-[11px] text-[#39ff14]/80 outline-none focus:border-[#39ff14]/50"
+                className={`w-full resize-none rounded border bg-[#050805] px-3 py-2 font-mono text-[11px] text-[#39ff14]/80 outline-none focus:border-[#39ff14]/50 ${
+                  payloadError ? "border-red-500/50" : "border-[#39ff14]/20"
+                }`}
               />
+              {payloadError && (
+                <p className="mt-1 font-mono text-[9px] text-red-400">{payloadError}</p>
+              )}
+              <label className="mt-3 flex items-center gap-2 text-[10px] text-[#39ff14]/50">
+                <input
+                  type="checkbox"
+                  checked={simulateFailure}
+                  onChange={(e) => setSimulateFailure(e.target.checked)}
+                  className="rounded"
+                />
+                Simulate failure at step 2
+              </label>
             </section>
           </div>
 
@@ -335,7 +418,9 @@ export function WorkflowStudio() {
                               ? "text-[#39ff14]"
                               : run.status === "running"
                                 ? "text-yellow-400"
-                                : "text-[#39ff14]/40"
+                                : run.status === "failed"
+                                  ? "text-red-400"
+                                  : "text-[#39ff14]/40"
                           }`}
                         >
                           {run.status}
@@ -366,20 +451,37 @@ export function WorkflowStudio() {
                 <p className="text-[10px] text-[#39ff14]/30">Sin ejecuciones previas</p>
               ) : (
                 history.map((h) => (
-                  <div
-                    key={h.id}
-                    className="rounded border border-[#39ff14]/10 bg-[#050805] px-3 py-2"
-                  >
-                    <p className="text-xs font-medium text-[#39ff14]/80">
-                      {WORKFLOW_TEMPLATES.find((t) => t.id === h.templateId)?.name}
-                    </p>
-                    <p className="mt-0.5 font-mono text-[9px] text-[#39ff14]/35">
-                      {h.payload.slice(0, 60)}…
-                    </p>
-                    {h.finishedAt && (
-                      <p className="mt-1 text-[9px] text-[#39ff14]/40">
-                        {h.finishedAt - h.startedAt}ms total
+                  <div key={h.id} className="rounded border border-[#39ff14]/10 bg-[#050805]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedHistoryId(expandedHistoryId === h.id ? null : h.id)
+                      }
+                      className="w-full px-3 py-2 text-left"
+                    >
+                      <p className="text-xs font-medium text-[#39ff14]/80">
+                        {WORKFLOW_TEMPLATES.find((t) => t.id === h.templateId)?.name}
                       </p>
+                      <p className="mt-0.5 font-mono text-[9px] text-[#39ff14]/35">
+                        {h.payload.slice(0, 60)}…
+                      </p>
+                      {h.finishedAt && (
+                        <p className="mt-1 text-[9px] text-[#39ff14]/40">
+                          {h.finishedAt - h.startedAt}ms total · {h.events.length} events
+                        </p>
+                      )}
+                    </button>
+                    {expandedHistoryId === h.id && (
+                      <div className="space-y-1 border-t border-[#39ff14]/10 px-3 py-2">
+                        {h.events.map((ev) => (
+                          <div key={ev.id} className="font-mono text-[9px] text-[#39ff14]/50">
+                            {ev.step} · {ev.status}
+                            {ev.output && (
+                              <span className="block truncate text-[#39ff14]/30">{ev.output}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))
