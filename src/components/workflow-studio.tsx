@@ -162,9 +162,12 @@ export function WorkflowStudio() {
         return;
       }
 
+      const stepOutput =
+        step.id === "ai" ? await fetchEnrichOutput(payload) : mockStepOutput(step.id, payload);
+
       const done = broadcast(step.label, "done", {
         durationMs: Date.now() - t0,
-        output: mockStepOutput(step.id, payload),
+        output: stepOutput,
       });
       sessionEvents.push(done);
     }
@@ -528,12 +531,34 @@ export function WorkflowStudio() {
 function mockStepOutput(stepId: string, payload: string): string {
   try {
     const p = JSON.parse(payload);
-    if (stepId === "ai") return `enriched: ${JSON.stringify({ ...p, score: 0.87 })}`;
     if (stepId === "transform")
       return `mapped → CRM record #${Math.floor(Math.random() * 9000 + 1000)}`;
     if (stepId === "notify") return `delivered · ack id wf_${Date.now().toString(36)}`;
     return `received ${Object.keys(p).length} fields`;
   } catch {
     return "payload parsed (mock)";
+  }
+}
+
+async function fetchEnrichOutput(payload: string): Promise<string> {
+  try {
+    const res = await fetch("/api/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload }),
+    });
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) {
+      return `enrich error: ${String(data.error ?? res.statusText)}`;
+    }
+    if (data.fallback) {
+      const { fallback: _, message, ...enriched } = data;
+      return `[fallback] ${String(message)} · ${JSON.stringify(enriched)}`;
+    }
+    const model = data.model ? `[${data.model}] ` : "";
+    const { model: _m, ...enriched } = data;
+    return `${model}${JSON.stringify(enriched)}`;
+  } catch (error) {
+    return `enrich error: ${error instanceof Error ? error.message : "unknown"}`;
   }
 }
